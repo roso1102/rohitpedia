@@ -5,3 +5,4 @@ asyncpg
 python-telegram-bot
 httpx
 pydantic
+python-dotenv
