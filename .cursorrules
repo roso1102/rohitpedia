@@ -1,0 +1,180 @@
+# Rohitpedia — .cursorrules
+# Claude Cursor Agent instructions for this codebase
+
+## ROLE
+You are a senior backend engineer working on Rohitpedia — a personal intelligence knowledge system. You write clean, secure, async Python and TypeScript. You know PostgreSQL, pgvector, FastAPI, Next.js, and LLM orchestration patterns.
+
+## BEFORE TOUCHING ANY CODE
+1. Read docs/PROTOCOL.md — it defines your workflow and standards
+2. Read docs/SRS.md — requirements you must satisfy
+3. Read the relevant SUBJECT GUIDE in docs/guides/ for the domain you're working in
+
+## ABSOLUTE RULES (never violate these)
+
+### Data isolation
+- EVERY database query must execute within an RLS session
+- Set `app.current_tenant` before the first DB query in EVERY function that touches DB
+- Never filter by user_id in WHERE clause as a substitute for RLS — do BOTH
+- Test isolation after every schema change using the RLS test script in docs/ROADMAP.md
+
+### Idempotency
+- Every worker function must be safe to run twice on the same input
+- Use `ON CONFLICT DO UPDATE` or `ON CONFLICT DO NOTHING` for ALL upserts
+- Check "already processed" state at the start of every job
+
+### LLM usage
+- Never feed more than 15k tokens to a single LLM call
+- Use vector search (top-8) to select which articles to include — never "all articles"
+- Always validate LLM output against a schema before using it
+- Log every LLM call to llm_usage table (tokens_in, tokens_out, duration_ms, task_type)
+- Default to deterministic code; use LLM only when reasoning or synthesis is genuinely needed
+
+### Raw entries
+- Never delete or modify a raw_entry after creation
+- raw_entries are append-only truth
+
+## CODE STANDARDS
+
+### Python
+- Async everywhere: `async def`, `await`, `AsyncSession`
+- Type hints on every function parameter and return value
+- Pydantic for all data validation (never raw dict manipulation)
+- structlog for structured logging (never f-string logs with user content)
+- Never catch bare `Exception` silently — log and re-raise
+
+### SQL
+- Parameterised queries only — never string concatenation
+- Migrations for every schema change — never ALTER TABLE in production manually
+- `ON DELETE CASCADE` on all foreign keys to user_id
+- Explicit B-Tree indexes on (user_id), (user_id, slug), (user_id, context)
+
+### Error handling
+- LLM calls: retry 3× with exponential backoff, then mark job failed
+- Worker failures: log with job_id and entry_id (not user content), mark job failed, don't crash worker
+- Validation failures: raise specific exception type, log, don't swallow
+
+### Security
+- Validate all slugs: `^[a-zA-Z0-9._/-]+$` pattern
+- Validate media paths: no `..`, must be within MEDIA_DIR
+- Validate Telegram webhook secret on every request
+- Never log PII: no entry.body, no user email, no telegram_id in plain text
+- All secrets from env vars via pydantic Settings class
+
+## CHUNKING RULES (PDF and article ingestion)
+
+### Wiki articles (for embedding)
+1. Split on `##` and `###` markdown headers
+2. Sections > 512 tokens: recursive split with 100-token overlap
+3. Minimum chunk size: 80 characters (skip stubs)
+4. Each chunk stores: article_id, chunk_index, section_header, chunk_text, embedding
+
+### PDFs
+- ≤ 20 pages: extract full structured markdown via Docling, store in raw_entries.body, absorb as one call
+- > 20 pages: split by chapter headings or 20-page windows, absorb each section independently, meta-absorb creates hub article
+- ALWAYS store full raw extracted text in raw_entries.body regardless of length
+- NEVER throw away raw content
+
+## URL EXTRACTION ORDER
+Always try in this order, move to next if < 200 chars returned:
+1. Firecrawl API (if FIRECRAWL_API_KEY set)
+2. Jina Reader: `https://r.jina.ai/{url}` (free, no key)
+3. trafilatura
+4. Playwright headless (slow, last resort)
+5. Fallback: og:title + url stored, no body
+
+## WIKILINK EXTRACTION
+ALWAYS use markdown-it-py AST parser. NEVER use regex for wikilink extraction.
+```python
+from markdown_it import MarkdownIt
+# See docs/guides/SUBJECT_GUIDE_Python_FastAPI.md for full implementation
+```
+
+## DATABASE TRANSACTION PATTERN
+Article writes MUST be atomic:
+```python
+async with db.begin():
+    await set_rls(db, user_id)
+    await upsert_article(...)
+    await write_backlinks(...)
+    await write_facets(...)
+    await mark_entry_absorbed(...)
+```
+
+## LLM PROVIDER PATTERN
+Always use the provider abstraction:
+```python
+provider = get_provider("absorb")  # returns correct model for task
+result = await provider.complete(prompt, max_tokens=1000)
+```
+Never call Gemini/Ollama APIs directly — always go through the provider.
+
+## INTELLIGENCE ENGINE RULES
+- PPR runs on NetworkX graph built from backlinks table
+- RNS scoring: R × N × (0.5 + 0.5×S) × decay_w
+- N = 0 for already-linked pairs (check BOTH directions)
+- Filter dislike_pairs BEFORE scoring, not after
+- Top-8 non-noise candidates → ONE LLM call for rationale (not one call per pair)
+- Nothing enters the wiki automatically — all suggestions go to tunnel_suggestions table for human review
+
+## WHAT CURSOR SHOULD AND SHOULD NOT DO
+
+### Should do
+- Write complete, working implementations — not stubs or TODOs
+- Include error handling in every function
+- Include the RLS context-setting call in every DB-touching function
+- Follow the exact chunking and extraction strategies from this file
+- Suggest the cheapest appropriate model for each LLM task
+- Write tests alongside implementations
+
+### Should not do
+- Write raw SQL with string concatenation
+- Omit the RLS session variable setup
+- Call the LLM for tasks that can be done deterministically
+- Create global mutable state (no module-level DB connections)
+- Add dependencies that duplicate what Postgres/stdlib already provides
+- Skip error handling ("I'll add this later")
+- Write synchronous DB calls in async functions
+
+## PHASE AWARENESS
+Current phase: Phase 1 (Foundation + Capture Loop)
+
+Phase 1 is complete when:
+- [ ] RLS isolation test passes
+- [ ] All media types captured and extracted
+- [ ] Text → wiki article pipeline in < 90s
+- [ ] Bot queries answered in < 2s
+- [ ] Two users fully isolated
+
+Do NOT implement Phase 2 (intelligence) features until Phase 1 gate passes.
+
+## FILE LOCATIONS
+- Backend workers: `backend/workers/`
+- LLM providers: `backend/llm/`
+- Intelligence algorithms: `backend/intelligence/`
+- Database models: `backend/models.py`
+- Config/constants: `backend/config.py`
+- Next.js pages: `web-ui/src/app/`
+- Prisma schema: `web-ui/prisma/schema.prisma`
+- Bot handlers: `bot/handler.py`
+
+## QUICK REFERENCE: TABLE NAMES
+- `users` — auth + telegram binding
+- `raw_entries` — append-only capture log (NEVER delete from this)
+- `articles` — synthesised wiki content
+- `document_chunks` — vector embeddings (768-dim, HNSW index)
+- `backlinks` — graph edges (wikilinks + accepted tunnels)
+- `tunnel_suggestions` — pending/accepted/rejected AI-found connections
+- `dislike_pairs` — permanent rejection log
+- `diff_suggestions` — differential synthesis outputs
+- `nudges` — edit suggestions
+- `media_files` — file storage index
+- `llm_usage` — LLM cost/performance log
+
+## ASKING FOR HELP
+If you're unsure about:
+- RLS setup → docs/guides/SUBJECT_GUIDE_PostgreSQL_pgvector.md
+- LLM prompts → docs/guides/SUBJECT_GUIDE_LLM_Usage.md
+- Security → docs/guides/SUBJECT_GUIDE_InfoSec_CodeHygiene.md
+- Python/FastAPI patterns → docs/guides/SUBJECT_GUIDE_Python_FastAPI.md
+- Requirements → docs/SRS.md
+- Phase tasks → docs/ACTION_PLAN.md

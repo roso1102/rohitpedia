@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+sqlalchemy[asyncio]
+asyncpg
+python-telegram-bot
+httpx
+pydantic
