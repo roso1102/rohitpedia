@@ -12,19 +12,21 @@ app.include_router(webhook_router)
 
 
 @app.on_event("startup")
-async def ensure_ingest_jobs_table() -> None:
+async def ensure_ingest_queue() -> None:
     async with engine.begin() as conn:
+        # Ensure pg-boss ingest queue exists after service restarts.
         await conn.execute(
             text(
                 """
-                CREATE TABLE IF NOT EXISTS ingest_jobs (
-                  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                  entry_id UUID NOT NULL REFERENCES raw_entries(id) ON DELETE CASCADE,
-                  status TEXT NOT NULL DEFAULT 'pending',
-                  payload JSONB DEFAULT '{}'::jsonb,
-                  created_at TIMESTAMPTZ DEFAULT now()
-                )
+                DO $$
+                BEGIN
+                  PERFORM pgboss.create_queue('ingest');
+                EXCEPTION
+                  WHEN OTHERS THEN
+                    -- queue may already exist; startup should remain resilient
+                    NULL;
+                END
+                $$;
                 """
             )
         )

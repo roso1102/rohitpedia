@@ -1,6 +1,5 @@
 import os
 import re
-import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -106,20 +105,25 @@ async def telegram_webhook(
     await db.execute(
         text(
             """
-            INSERT INTO ingest_jobs (user_id, entry_id, status, payload)
-            VALUES (:user_id, :entry_id, 'pending', CAST(:payload AS jsonb))
+            INSERT INTO pgboss.job (name, data)
+            VALUES (
+              'ingest',
+              jsonb_build_object(
+                'user_id', CAST(:user_id AS text),
+                'entry_id', CAST(:entry_id AS text),
+                'source_type', CAST(:source_type AS text),
+                'source_url', CAST(:source_url AS text),
+                'media_path', CAST(:media_path AS text)
+              )
+            )
             """
         ),
         {
-            "user_id": user_id,
-            "entry_id": entry_id,
-            "payload": json.dumps(
-                {
-                    "source_type": source_type,
-                    "source_url": source_url,
-                    "media_path": media_path,
-                }
-            ),
+            "user_id": str(user_id),
+            "entry_id": str(entry_id),
+            "source_type": source_type,
+            "source_url": source_url,
+            "media_path": media_path,
         },
     )
     await db.commit()

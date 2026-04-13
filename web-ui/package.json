@@ -12,6 +12,7 @@
   "type": "commonjs",
   "dependencies": {
     "@prisma/client": "^7.7.0",
+    "pg-boss": "^12.15.0",
     "prisma": "^7.7.0"
   }
 }

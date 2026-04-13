@@ -3,6 +3,8 @@ from uuid import UUID
 
 from fastapi import Request
 
+SESSION_USER_COOKIE = "rp_user_id"
+
 
 def _is_valid_uuid(value: str | None) -> bool:
     if not value:
@@ -15,10 +17,10 @@ def _is_valid_uuid(value: str | None) -> bool:
 
 
 async def attach_tenant_context(request: Request, call_next):
-    tenant_id = request.headers.get("x-user-id")
-    request.state.current_tenant = tenant_id if _is_valid_uuid(tenant_id) else None
+    session_tenant = request.cookies.get(SESSION_USER_COOKIE)
+    request.state.current_tenant = session_tenant if _is_valid_uuid(session_tenant) else None
     request.state.telegram_user_id = None
-    request.state.request_source = "header" if request.state.current_tenant else "anonymous"
+    request.state.request_source = "session" if request.state.current_tenant else "anonymous"
 
     # For Telegram webhook requests, capture telegram_id so DB dependency can
     # resolve tenant and set RLS context before writes.
