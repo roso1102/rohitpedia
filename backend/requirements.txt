@@ -6,3 +6,6 @@ python-telegram-bot
 httpx
 pydantic
 python-dotenv
+firecrawl-py
+trafilatura
+playwright

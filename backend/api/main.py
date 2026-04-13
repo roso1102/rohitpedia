@@ -14,16 +14,18 @@ app.include_router(webhook_router)
 @app.on_event("startup")
 async def ensure_ingest_queue() -> None:
     async with engine.begin() as conn:
-        # Ensure pg-boss ingest queue exists after service restarts.
+        # Ensure pg-boss queues exist after service restarts.
         await conn.execute(
             text(
                 """
                 DO $$
                 BEGIN
-                  PERFORM pgboss.create_queue('ingest');
+                  PERFORM pgboss.create_queue('ingest', '{"policy":"standard"}'::jsonb);
+                  PERFORM pgboss.create_queue('absorb', '{"policy":"standard"}'::jsonb);
+                  PERFORM pgboss.create_queue('embed', '{"policy":"standard"}'::jsonb);
                 EXCEPTION
                   WHEN OTHERS THEN
-                    -- queue may already exist; startup should remain resilient
+                    -- queues may already exist; startup should remain resilient
                     NULL;
                 END
                 $$;

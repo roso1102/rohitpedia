@@ -128,34 +128,34 @@ COMMIT;
 ### Subtasks
 
 **3.1 — Worker infrastructure (pg-boss)**
-- [ ] Install: `pip install pgboss`
-- [ ] Create `backend/workers/runner.py` — polls pg-boss, dispatches to handlers
-- [ ] Create job types: `ingest`, `absorb`, `embed`
-- [ ] Test: enqueue dummy job → worker picks it up → logs completion
+- [x] Install: `pip install pgboss`
+- [x] Create `backend/workers/runner.py` — polls pg-boss, dispatches to handlers
+- [x] Create job types: `ingest`, `absorb`, `embed`
+- [x] Test: enqueue dummy job → worker picks it up → logs completion
 
 **3.2 — Text extraction (trivial)**
-- [ ] Text messages: store body as-is in raw_entries.body
-- [ ] Add `source_type = 'text'`
+- [x] Text messages: store body as-is in raw_entries.body
+- [x] Add `source_type = 'text'`
 
 **3.3 — URL extraction (layered)**
-- [ ] Install: `pip install firecrawl-py trafilatura httpx`
-- [ ] Implement layered strategy from ROADMAP.md (Firecrawl → Jina → trafilatura → Playwright)
-- [ ] Test with 5 URLs: a normal article, a Medium article, a Twitter/X link, a PDF link, a 404
-- [ ] Each layer logs which one succeeded
+- [x] Install: `pip install firecrawl-py trafilatura httpx`
+- [x] Implement layered strategy from ROADMAP.md (Firecrawl → Jina → trafilatura → Playwright)
+- [x] Test with 5 URLs: a normal article, a Medium article, a Twitter/X link, a PDF link, a 404
+- [x] Each layer logs which one succeeded
 
 **3.4 — Voice transcription**
-- [ ] Install whisper.cpp (see README setup section)
-- [ ] Download Telegram .ogg file → save to `./media/`
-- [ ] Run `whisper-cpp -m models/ggml-base.en.bin -f audio.ogg`
-- [ ] Store transcript as body, media_path pointing to .ogg
-- [ ] Test: send a 30-second voice message, verify transcript is reasonable
+- [x] Install whisper.cpp (see README setup section)
+- [x] Download Telegram .ogg file → save to `./media/`
+- [x] Run `whisper-cpp -m models/ggml-base.en.bin -f audio.ogg`
+- [x] Store transcript as body, media_path pointing to .ogg
+- [x] Test: send a 30-second voice message, verify transcript is reasonable
 
 **3.5 — Image processing**
-- [ ] Install: `pip install easyocr Pillow`
-- [ ] Download image from Telegram → save compressed JPEG to `./media/`
-- [ ] Text detection heuristic: if EasyOCR confidence > 0.5 and detected chars > 20, use OCR
-- [ ] Else: call LLaVA via Ollama for description
-- [ ] Test: screenshot with text, photo of food, diagram
+- [x] Phase-1 implementation switched to API-first: Gemini Flash vision (no EasyOCR install yet)
+- [x] Download image from Telegram → save to `./media/`
+- [x] Use Gemini Flash to extract text (if present) or return concise image description
+- [x] Local model path (EasyOCR/LLaVA) deferred and will be added in a later phase
+- [x] Test: screenshot with text, photo of food, diagram
 
 **3.6 — PDF processing (Docling-first)**
 - [ ] Install: `pip install docling pymupdf pytesseract`
