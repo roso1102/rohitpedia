@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  telegramId    BigInt?         @unique(map: "users_telegram_id_key") @map("telegram_id")
+  activeContext String?         @map("active_context")
+  createdAt     DateTime?       @default(now()) @db.Timestamptz(6) @map("created_at")
+  articles      Article[]
+  rawEntries    RawEntry[]
+  chunks        DocumentChunk[]
+  backlinks     Backlink[]
+  mediaFiles    MediaFile[]
+  ingestJobs    IngestJob[]
+
+  @@map("users")
+}
+
+model RawEntry {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String      @db.Uuid @map("user_id")
+  body        String
+  sourceType  String      @map("source_type")
+  mediaPath   String?     @map("media_path")
+  sourceUrl   String?     @map("source_url")
+  context     String?
+  status      String?     @default("pending")
+  absorbedInto String?    @map("absorbed_into")
+  createdAt   DateTime?   @default(now()) @db.Timestamptz(6) @map("created_at")
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaFiles  MediaFile[]
+  ingestJobs  IngestJob[]
+
+  @@map("raw_entries")
+}
+
+model Article {
+  id         String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String          @db.Uuid @map("user_id")
+  slug       String
+  title      String
+  bodyMd     String          @default("") @map("body_md")
+  context    String?
+  facets     Json?           @default("{}")
+  importance Int?            @default(1)
+  avoid      Json?           @default("[]")
+  updatedAt  DateTime?       @default(now()) @db.Timestamptz(6) @map("updated_at")
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks     DocumentChunk[]
+
+  @@unique([userId, slug], map: "articles_user_id_slug_key")
+  @@map("articles")
+}
+
+model DocumentChunk {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  articleId     String      @db.Uuid @map("article_id")
+  userId        String      @db.Uuid @map("user_id")
+  chunkIndex    Int         @map("chunk_index")
+  sectionHeader String?     @map("section_header")
+  chunkText     String      @map("chunk_text")
+  embedding     Unsupported("vector(768)")?
+  createdAt     DateTime?   @default(now()) @db.Timestamptz(6) @map("created_at")
+  article       Article     @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("document_chunks")
+}
+
+model Backlink {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @db.Uuid @map("user_id")
+  fromSlug  String    @map("from_slug")
+  toSlug    String    @map("to_slug")
+  linkType  String?   @default("wikilink") @map("link_type")
+  createdAt DateTime? @default(now()) @db.Timestamptz(6) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, fromSlug, toSlug], map: "backlinks_user_id_from_slug_to_slug_key")
+  @@map("backlinks")
+}
+
+model MediaFile {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @db.Uuid @map("user_id")
+  entryId   String?   @db.Uuid @map("entry_id")
+  filePath  String    @map("file_path")
+  mimeType  String    @map("mime_type")
+  sizeBytes BigInt?   @map("size_bytes")
+  createdAt DateTime? @default(now()) @db.Timestamptz(6) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rawEntry  RawEntry? @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@map("media_files")
+}
+
+model IngestJob {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @db.Uuid @map("user_id")
+  entryId   String    @db.Uuid @map("entry_id")
+  status    String    @default("pending")
+  payload   Json?     @default("{}")
+  createdAt DateTime? @default(now()) @db.Timestamptz(6) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rawEntry  RawEntry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@map("ingest_jobs")
+}

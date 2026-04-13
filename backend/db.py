@@ -31,9 +31,20 @@ AsyncSessionLocal = async_sessionmaker(
 async def get_db_session(request: Request) -> AsyncGenerator[AsyncSession]:
     async with AsyncSessionLocal() as session:
         tenant = getattr(request.state, "current_tenant", None)
+        telegram_user_id = getattr(request.state, "telegram_user_id", None)
+
+        if not tenant and telegram_user_id is not None:
+            user_lookup = await session.execute(
+                text("SELECT id FROM users WHERE telegram_id = :telegram_id LIMIT 1"),
+                {"telegram_id": telegram_user_id},
+            )
+            tenant = user_lookup.scalar_one_or_none()
+            if tenant:
+                request.state.current_tenant = str(tenant)
+
         if tenant:
             await session.execute(
                 text("SELECT set_config('app.current_tenant', :tenant, false)"),
-                {"tenant": tenant},
+                {"tenant": str(tenant)},
             )
         yield session

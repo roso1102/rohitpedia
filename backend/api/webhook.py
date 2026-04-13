@@ -1,5 +1,6 @@
 import os
 import re
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -70,25 +71,26 @@ async def telegram_webhook(
     if not telegram_id:
         return {"ok": True, "skipped": "no_telegram_id"}
 
-    async with db.begin():
-        user_row = await db.execute(
-            text("SELECT id FROM users WHERE telegram_id = :telegram_id LIMIT 1"),
-            {"telegram_id": telegram_id},
-        )
-        user_id = user_row.scalar_one_or_none()
+    user_row = await db.execute(
+        text("SELECT id FROM users WHERE telegram_id = :telegram_id LIMIT 1"),
+        {"telegram_id": telegram_id},
+    )
+    user_id = user_row.scalar_one_or_none()
 
-        if not user_id:
-            return {"ok": True, "skipped": "user_not_linked"}
+    if not user_id:
+        return {"ok": True, "skipped": "user_not_linked"}
 
-        await db.execute(
-            text("SELECT set_config('app.current_tenant', :tenant, true)"),
-            {"tenant": str(user_id)},
-        )
+    await db.execute(
+        text("SELECT set_config('app.current_tenant', :tenant, true)"),
+        {"tenant": str(user_id)},
+    )
+    entry_id = (
         await db.execute(
             text(
                 """
                 INSERT INTO raw_entries (user_id, body, source_type, source_url, media_path)
                 VALUES (:user_id, :body, :source_type, :source_url, :media_path)
+                RETURNING id
                 """
             ),
             {
@@ -99,6 +101,26 @@ async def telegram_webhook(
                 "media_path": media_path,
             },
         )
+    ).scalar_one()
 
-    # TODO: enqueue ingest job with pg-boss after worker runner is added.
+    await db.execute(
+        text(
+            """
+            INSERT INTO ingest_jobs (user_id, entry_id, status, payload)
+            VALUES (:user_id, :entry_id, 'pending', CAST(:payload AS jsonb))
+            """
+        ),
+        {
+            "user_id": user_id,
+            "entry_id": entry_id,
+            "payload": json.dumps(
+                {
+                    "source_type": source_type,
+                    "source_url": source_url,
+                    "media_path": media_path,
+                }
+            ),
+        },
+    )
+    await db.commit()
     return {"ok": True}
