@@ -15,6 +15,9 @@ __pycache__/
 node_modules/
 web-ui/node_modules/
 
+# Local tooling binaries
+tools/
+
 # Ignore all markdown docs except top-level README
 *.md
 !README.md
