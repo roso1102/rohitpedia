@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+import mimetypes
 import os
 from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
+
+
+def get_media_metadata(local_path: str) -> tuple[str, int]:
+    path = Path(local_path)
+    mime_type, _ = mimetypes.guess_type(path.name)
+    resolved_mime = mime_type or "application/octet-stream"
+    size_bytes = path.stat().st_size if path.exists() else 0
+    return resolved_mime, size_bytes
 
 
 async def download_telegram_file(file_id: str, user_id: str) -> str | None:
@@ -29,7 +39,8 @@ async def download_telegram_file(file_id: str, user_id: str) -> str | None:
             return None
 
     parsed_name = Path(urlparse(file_path).path).name
-    target_dir = Path(media_root) / str(user_id)
+    now = datetime.now(timezone.utc)
+    target_dir = Path(media_root) / str(user_id) / f"{now.year:04d}" / f"{now.month:02d}"
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / parsed_name
     target.write_bytes(content_resp.content)

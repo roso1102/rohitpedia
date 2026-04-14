@@ -9,3 +9,7 @@ python-dotenv
 firecrawl-py
 trafilatura
 playwright
+docling
+pymupdf
+pytesseract
+markdown-it-py
