@@ -158,18 +158,23 @@ COMMIT;
 - [x] Test: screenshot with text, photo of food, diagram
 
 **3.6 — PDF processing (Docling-first)**
-- [ ] Install: `pip install docling pymupdf pytesseract`
-- [ ] Docling path: `converter.convert(path).document.export_to_markdown()`
-- [ ] Fallback: pymupdf text extraction
-- [ ] Scanned pages: extract page as image → Tesseract OCR
-- [ ] Short PDF (≤ 20 pages): store full markdown as body
-- [ ] Long PDF (> 20 pages): split by headings → store sections list in body as JSON
-- [ ] Test: 5-page article PDF, 80-page report PDF, scanned document
+- [x] Install: `pip install docling pymupdf pytesseract`
+- [x] Windows setup note: enable Developer Mode (symlink support) or run terminal as Administrator
+- [x] Optional performance note: set `HF_TOKEN` in env to reduce Hugging Face rate-limit/download warnings
+- [x] Docling path: `converter.convert(path).document.export_to_markdown()`
+- [x] Fallback: pymupdf text extraction
+- [x] Scanned pages: extract page as image → Tesseract OCR
+- [x] Short PDF (≤ 20 pages): store full markdown as body
+- [x] Long PDF (> 20 pages): split by headings → store sections list in body as JSON
+- [x] Save extracted sidecar output next to source media (`.extracted.md` for short, `.sections.json` for long)
+- [x] Normalize extraction text (unicode cleanup, smart quote/dash normalization, whitespace cleanup)
+- [x] Keep original PDF for provenance, but treat structured markdown/sections as primary downstream input
+- [x] Test: 5-page article PDF, 80-page report PDF, scanned document
 
 **3.7 — Media file storage**
-- [ ] Save all media to `./media/{user_id}/{yyyy}/{mm}/`
-- [ ] Insert row in `media_files` table
-- [ ] Verify: after processing, media_files row exists with correct path and mime_type
+- [x] Save all media to `./media/{user_id}/{yyyy}/{mm}/`
+- [x] Insert row in `media_files` table
+- [x] Verify: after processing, media_files row exists with correct path and mime_type
 
 **Context:** SRS.md FR-CAP-03 through FR-CAP-10, ROADMAP.md Phase 1C
 
@@ -182,46 +187,49 @@ COMMIT;
 ### Subtasks
 
 **4.1 — LLM provider abstraction**
-- [ ] Create `backend/llm/provider.py` — abstract base class `LLMProvider`
-- [ ] Methods: `complete(prompt, max_tokens, schema) -> dict`
-- [ ] Create `backend/llm/gemini.py` — Gemini Flash 2.5 implementation
-- [ ] Create `backend/llm/local.py` — Ollama implementation (for Phi-3 mini)
-- [ ] Provider selected by `LLM_ABSORB_PROVIDER` env var
+- [x] Create `backend/llm/provider.py` — abstract base class `LLMProvider`
+- [x] Methods: `complete(prompt, max_tokens, schema) -> dict`
+- [x] Create `backend/llm/gemini.py` — Gemini Flash 2.5 implementation
+- [x] Create `backend/llm/local.py` — Ollama implementation (for Phi-3 mini)
+- [x] Provider selected by `LLM_ABSORB_PROVIDER` env var
 
 **4.2 — System prompt engineering**
-- [ ] Write the absorb system prompt (formatting rules, facet schema, wikilink rules)
-- [ ] Key constraint in prompt: "Only create [[wikilinks]] to slugs in the provided candidate list. Never invent slug names."
-- [ ] Implement Gemini context caching for this prompt
+- [x] Write the absorb system prompt (formatting rules, facet schema, wikilink rules)
+- [x] Key constraint in prompt: "Only create [[wikilinks]] to slugs in the provided candidate list. Never invent slug names."
+- [x] Implement Gemini context caching for this prompt
 
 **4.3 — RAG routing (pre-absorb embedding search)**
-- [ ] Install: `pip install sentence-transformers` or use Ollama HTTP API for nomic-embed
-- [ ] Embed the raw entry text
-- [ ] Query pgvector for top-8 related articles (min cosine 0.55)
-- [ ] These articles passed to LLM as context
+- [x] Use Ollama HTTP API for nomic-embed (no sentence-transformers dependency)
+- [x] Embed the raw entry text
+- [x] Query pgvector for top-8 related articles (min cosine 0.55)
+- [x] These articles passed to LLM as context
 
 **4.4 — Absorb call**
-- [ ] Build prompt: system + entry text + top-8 article bodies + slug list
-- [ ] Call Gemini Flash 2.5
-- [ ] Parse response: expects `{slug, title, body_md, facets}`
-- [ ] Validate response schema
-- [ ] Test: send 3 notes about turmeric → single turmeric.md article with health facets
+- [x] Build prompt: system + entry text + top-8 article bodies + slug list
+- [x] Call Gemini Flash 2.5
+- [x] Parse response: expects `{slug, title, body_md, facets}`
+- [x] Validate response schema
+- [x] Guardrail: never send entire long-PDF blob to LLM; absorb per section for long documents
+- [x] For long PDFs: section-wise absorb -> create/update section articles -> run meta-absorb for overview article
+- [x] Include provenance metadata in absorb payload (entry_id, source page/heading span) for traceability
+- [x] Test: send 3 notes about turmeric → single turmeric.md article with health facets
 
 **4.5 — AST wikilink extraction**
-- [ ] Install: `pip install markdown-it-py`
-- [ ] Function: `extract_wikilinks_ast(markdown) -> list[str]`
-- [ ] Must NOT extract links from code blocks or code spans
-- [ ] Test: markdown with links in body, in code blocks, in headings — verify only body links extracted
+- [x] Install: `pip install markdown-it-py`
+- [x] Function: `extract_wikilinks_ast(markdown) -> list[str]`
+- [x] Must NOT extract links from code blocks or code spans
+- [x] Test: markdown with links in body, in code blocks, in headings — verify only body links extracted
 
 **4.6 — Transactional write**
-- [ ] Article upsert + backlinks + facets in one `async with db.begin()` block
-- [ ] Verify: after absorb, check article exists, backlinks table has rows, facets populated
+- [x] Article upsert + backlinks + facets in one `async with conn.transaction()` block (`absorb.py`)
+- [x] Verify: `scripts/verify_backlinks_transaction.py` — article + backlinks same txn; inline-code wikilinks skipped
 
 **4.7 — Facet extraction (Phi-3 mini)**
-- [ ] Separate call after absorb: send article body to Phi-3 mini with JSON schema prompt
-- [ ] Schema: `{category[], themes[], colors[], health[], cuisine[], style[], sentiment}`
-- [ ] Validate output against schema
-- [ ] Store in `articles.facets`
-- [ ] Test: turmeric article → `{health: ["anti-inflammatory"], cuisine: ["Indian"], color: ["yellow"]}`
+- [x] Separate call after absorb: send article body to facet model with JSON schema prompt (`_extract_facets`)
+- [x] Schema: `{category[], themes[], colors[], health[], cuisine[], style[], sentiment}` (`llm/facets.py`)
+- [x] Validate output against schema (`validate_facets_payload`)
+- [x] Store in `articles.facets` (overwrites absorb payload facets with validated facet result)
+- [x] Test: turmeric article → `{health: ["anti-inflammatory"], cuisine: ["Indian"], color: ["yellow"]}` (`verify_facets_turmeric.py` passed using Groq `llama-3.1-8b-instant`)
 
 **Context:** SRS.md FR-ABS-01 through FR-ABS-07, ROADMAP.md Phase 1D
 
@@ -239,12 +247,15 @@ COMMIT;
 - [ ] Long sections (> 512 tokens): recursive split with 100-token overlap
 - [ ] Minimum chunk size: 80 chars
 - [ ] Each Chunk has: `index`, `header`, `text`
+- [ ] Add hierarchical metadata on each chunk: `{doc_id, section_id, parent_section_id, page_range}`
+- [ ] For long-PDF derived articles, chunk from section outputs (not monolithic raw PDF text)
 
 **5.2 — Embedding and upsert**
 - [ ] For each chunk: call nomic-embed-text via Ollama
 - [ ] Upsert into `document_chunks`: `ON CONFLICT (article_id, chunk_index) DO UPDATE`
 - [ ] Track embed state: update `articles.embed_state` timestamp
 - [ ] Only re-embed if `articles.updated_at > embed_state`
+- [ ] Contextual retrieval variant: prepend parent heading path before embedding section chunks
 
 **5.3 — Verify index**
 - [ ] After embedding 20 test articles, run: `SELECT count(*) FROM document_chunks`
