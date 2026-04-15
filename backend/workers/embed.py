@@ -23,7 +23,7 @@ async def handle(job_data: dict[str, Any], conn: asyncpg.Connection) -> dict[str
 
     row = await conn.fetchrow(
         """
-        SELECT id, body_md, updated_at, embed_state
+        SELECT id, body_md, context, updated_at, embed_state
         FROM articles
         WHERE id = $1::uuid AND user_id = $2::uuid
         LIMIT 1
@@ -45,7 +45,9 @@ async def handle(job_data: dict[str, Any], conn: asyncpg.Connection) -> dict[str
         }
 
     body_md = str(row["body_md"] or "")
-    chunks = chunk_article(body_md, doc_id=str(article_id))
+    ctx = row["context"]
+    context_json = str(ctx) if ctx is not None else None
+    chunks = chunk_article(body_md, doc_id=str(article_id), context_json=context_json)
 
     async with conn.transaction():
         await conn.execute(

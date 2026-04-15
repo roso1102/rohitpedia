@@ -242,13 +242,15 @@ COMMIT;
 ### Subtasks
 
 **5.1 — Chunking function**
-- [x] `chunk_article(body_md) -> list[Chunk]` (`workers/chunk_article.py`)
-- [x] Split by `##` and `###` headers
-- [x] Long sections (> 512 tokens): recursive split with 100-token overlap
-- [x] Minimum chunk size: 80 chars
+- [x] `chunk_article(body_md, *, doc_id, page_range=…, context_json=…) -> list[Chunk]` (`workers/chunk_article.py`)
+- [x] Split by `##` and `###` headers **outside fenced code blocks** (lines starting with ` ``` ` toggle fence; no false splits from `##` inside code)
+- [x] Long sections (> ~512 tokens, char-approximated): **recursive** split with ~100-token overlap (`_split_long_text_recursive` / `_take_first_window`)
+- [x] Minimum chunk size: 80 chars — merge short fragments **only within the same `section_id`**
 - [x] Each Chunk has: `index`, `header`, `text`
-- [x] Add hierarchical metadata on each chunk: `{doc_id, section_id, parent_section_id, page_range}` (stored in `document_chunks.chunk_meta`)
-- [x] For long-PDF derived articles, chunk from section outputs (not monolithic raw PDF text) — section bodies are separate articles after absorb
+- [x] Hierarchical metadata per chunk: `{doc_id, section_id, parent_section_id, page_range, heading_path}` → stored in `document_chunks.chunk_meta`
+- [x] `page_range`: optional `page_range` arg or parsed from article `context` JSON (`page_range` or `page_start`/`page_end`) for PDF section articles
+- [x] For long-PDF derived articles, chunk from **section-sized article bodies** after absorb (not the monolithic PDF blob)
+- [x] Verify: `scripts/verify_chunk_article.py` (headers, fence, long split, meta, parent id, context page_range, contextual embed text)
 
 **5.2 — Embedding and upsert**
 - [x] For each chunk: call nomic-embed-text via Ollama
