@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS articles (
   facets JSONB DEFAULT '{}',
   importance INT DEFAULT 1,
   avoid JSONB DEFAULT '[]',
+  embed_state TIMESTAMPTZ,
   updated_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(user_id, slug)
 );
@@ -42,8 +43,10 @@ CREATE TABLE IF NOT EXISTS document_chunks (
   chunk_index INT NOT NULL,
   section_header TEXT,
   chunk_text TEXT NOT NULL,
+  chunk_meta JSONB DEFAULT '{}',
   embedding vector(768),
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(article_id, chunk_index)
 );
 
 CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding_hnsw

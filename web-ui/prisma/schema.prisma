@@ -49,6 +49,7 @@ model Article {
   facets     Json?           @default("{}")
   importance Int?            @default(1)
   avoid      Json?           @default("[]")
+  embedState DateTime?       @map("embed_state") @db.Timestamptz(6)
   updatedAt  DateTime?       @default(now()) @db.Timestamptz(6) @map("updated_at")
   user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   chunks     DocumentChunk[]
@@ -64,11 +65,13 @@ model DocumentChunk {
   chunkIndex    Int         @map("chunk_index")
   sectionHeader String?     @map("section_header")
   chunkText     String      @map("chunk_text")
+  chunkMeta     Json?       @default("{}") @map("chunk_meta")
   embedding     Unsupported("vector(768)")?
   createdAt     DateTime?   @default(now()) @db.Timestamptz(6) @map("created_at")
   article       Article     @relation(fields: [articleId], references: [id], onDelete: Cascade)
   user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([articleId, chunkIndex], map: "document_chunks_article_id_chunk_index_key")
   @@map("document_chunks")
 }
 

@@ -55,6 +55,35 @@ def _get_facets_fallback_provider() -> LLMProvider | None:
     return None
 
 
+async def _article_id_for_slug(conn: asyncpg.Connection, user_id: str, slug: str) -> str | None:
+    val = await conn.fetchval(
+        """
+        SELECT id::text FROM articles
+        WHERE user_id = $1::uuid AND slug = $2
+        """,
+        str(user_id),
+        slug,
+    )
+    return str(val) if val else None
+
+
+async def _enqueue_embed_job(conn: asyncpg.Connection, user_id: str, article_id: str) -> None:
+    await conn.execute(
+        """
+        INSERT INTO pgboss.job (name, data)
+        VALUES (
+          'embed',
+          jsonb_build_object(
+            'user_id', $1::text,
+            'article_id', $2::text
+          )
+        )
+        """,
+        str(user_id),
+        str(article_id),
+    )
+
+
 def _vector_literal(values: list[float]) -> str:
     return "[" + ",".join(f"{v:.8f}" for v in values) + "]"
 
@@ -286,6 +315,7 @@ async def handle(job_data: dict[str, Any], conn: asyncpg.Connection) -> dict[str
     errors: list[str] = []
 
     if sections:
+        embed_jobs_enqueued = 0
         extra_slugs: list[str] = list(base_candidates)
         section_writes: list[tuple[dict[str, Any], str]] = []
         for i, sec in enumerate(sections[:LONG_PDF_MAX_SECTIONS]):
@@ -398,6 +428,17 @@ async def handle(job_data: dict[str, Any], conn: asyncpg.Connection) -> dict[str
                     str(user_id),
                 )
 
+            for payload, _ctx in section_writes:
+                aid = await _article_id_for_slug(conn, str(user_id), payload["slug"])
+                if aid:
+                    await _enqueue_embed_job(conn, str(user_id), aid)
+                    embed_jobs_enqueued += 1
+            if meta_payload and meta_ctx:
+                aid_m = await _article_id_for_slug(conn, str(user_id), meta_payload["slug"])
+                if aid_m:
+                    await _enqueue_embed_job(conn, str(user_id), aid_m)
+                    embed_jobs_enqueued += 1
+
         return {
             "handled_by": "absorb",
             "entry_id": str(entry_id),
@@ -406,6 +447,7 @@ async def handle(job_data: dict[str, Any], conn: asyncpg.Connection) -> dict[str
             "primary_slug": primary_slug,
             "section_slugs": [s for s, _ in created],
             "backlink_rows_by_article": backlink_counts or None,
+            "embed_jobs_enqueued": embed_jobs_enqueued,
             "errors": errors or None,
             "related_context_count": len(related_context),
             "retrieval_error": retrieval_error,
@@ -468,6 +510,10 @@ async def handle(job_data: dict[str, Any], conn: asyncpg.Connection) -> dict[str
             str(user_id),
         )
 
+    aid = await _article_id_for_slug(conn, str(user_id), payload["slug"])
+    if aid:
+        await _enqueue_embed_job(conn, str(user_id), aid)
+
     return {
         "handled_by": "absorb",
         "entry_id": str(entry_id),
@@ -476,6 +522,7 @@ async def handle(job_data: dict[str, Any], conn: asyncpg.Connection) -> dict[str
         "slug": payload["slug"],
         "title": payload["title"],
         "backlink_rows_inserted": backlink_count,
+        "embed_jobs_enqueued": 1 if aid else 0,
         "facets_error": facets_err,
         "related_context_count": len(related_context),
         "retrieval_error": retrieval_error,

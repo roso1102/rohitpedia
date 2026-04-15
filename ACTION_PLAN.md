@@ -242,25 +242,27 @@ COMMIT;
 ### Subtasks
 
 **5.1 — Chunking function**
-- [ ] `chunk_article(body_md) -> list[Chunk]`
-- [ ] Split by `##` and `###` headers
-- [ ] Long sections (> 512 tokens): recursive split with 100-token overlap
-- [ ] Minimum chunk size: 80 chars
-- [ ] Each Chunk has: `index`, `header`, `text`
-- [ ] Add hierarchical metadata on each chunk: `{doc_id, section_id, parent_section_id, page_range}`
-- [ ] For long-PDF derived articles, chunk from section outputs (not monolithic raw PDF text)
+- [x] `chunk_article(body_md) -> list[Chunk]` (`workers/chunk_article.py`)
+- [x] Split by `##` and `###` headers
+- [x] Long sections (> 512 tokens): recursive split with 100-token overlap
+- [x] Minimum chunk size: 80 chars
+- [x] Each Chunk has: `index`, `header`, `text`
+- [x] Add hierarchical metadata on each chunk: `{doc_id, section_id, parent_section_id, page_range}` (stored in `document_chunks.chunk_meta`)
+- [x] For long-PDF derived articles, chunk from section outputs (not monolithic raw PDF text) — section bodies are separate articles after absorb
 
 **5.2 — Embedding and upsert**
-- [ ] For each chunk: call nomic-embed-text via Ollama
-- [ ] Upsert into `document_chunks`: `ON CONFLICT (article_id, chunk_index) DO UPDATE`
-- [ ] Track embed state: update `articles.embed_state` timestamp
-- [ ] Only re-embed if `articles.updated_at > embed_state`
-- [ ] Contextual retrieval variant: prepend parent heading path before embedding section chunks
+- [x] For each chunk: call nomic-embed-text via Ollama
+- [x] Upsert into `document_chunks`: delete + insert per article; unique `(article_id, chunk_index)` in schema (`sql/phase1_task5_embed.sql`)
+- [x] Track embed state: update `articles.embed_state` timestamp
+- [x] Only re-embed if `articles.updated_at > embed_state`
+- [x] Contextual retrieval variant: prepend parent heading path before embedding section chunks (`contextual_embed_text`)
+- [x] Enqueue `embed` job after successful absorb (`absorb.py`)
 
 **5.3 — Verify index**
 - [ ] After embedding 20 test articles, run: `SELECT count(*) FROM document_chunks`
 - [ ] Run a test kNN query: `SELECT chunk_text FROM document_chunks ORDER BY embedding <=> '[...]' LIMIT 5`
 - [ ] Verify results are semantically relevant
+- [x] Helper: `scripts/verify_embed_index.py` (count + sample kNN when Ollama embed works)
 
 **Context:** SRS.md FR-EMB-01 through FR-EMB-04
 
