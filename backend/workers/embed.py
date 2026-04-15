@@ -50,14 +50,6 @@ async def handle(job_data: dict[str, Any], conn: asyncpg.Connection) -> dict[str
     chunks = chunk_article(body_md, doc_id=str(article_id), context_json=context_json)
 
     async with conn.transaction():
-        await conn.execute(
-            """
-            DELETE FROM document_chunks
-            WHERE article_id = $1::uuid AND user_id = $2::uuid
-            """,
-            str(article_id),
-            str(user_id),
-        )
         for ch in chunks:
             to_embed = contextual_embed_text(ch)[:12000]
             vec, err = await embed_with_ollama(to_embed)
@@ -68,6 +60,13 @@ async def handle(job_data: dict[str, Any], conn: asyncpg.Connection) -> dict[str
                 INSERT INTO document_chunks
                   (article_id, user_id, chunk_index, section_header, chunk_text, embedding, chunk_meta)
                 VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::vector, $7::jsonb)
+                ON CONFLICT (article_id, chunk_index) DO UPDATE SET
+                  user_id = EXCLUDED.user_id,
+                  section_header = EXCLUDED.section_header,
+                  chunk_text = EXCLUDED.chunk_text,
+                  embedding = EXCLUDED.embedding,
+                  chunk_meta = EXCLUDED.chunk_meta,
+                  created_at = now()
                 """,
                 str(article_id),
                 str(user_id),
@@ -77,6 +76,17 @@ async def handle(job_data: dict[str, Any], conn: asyncpg.Connection) -> dict[str
                 _vector_literal(vec),
                 json.dumps(ch.meta),
             )
+        await conn.execute(
+            """
+            DELETE FROM document_chunks
+            WHERE article_id = $1::uuid
+              AND user_id = $2::uuid
+              AND chunk_index >= $3
+            """,
+            str(article_id),
+            str(user_id),
+            len(chunks),
+        )
         await conn.execute(
             """
             UPDATE articles
