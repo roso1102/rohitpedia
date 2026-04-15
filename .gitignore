@@ -18,3 +18,7 @@ web-ui/node_modules/
 # Local tooling binaries
 tools/
 
+# Local media and model weights (large / user-specific)
+media/
+models/
+
